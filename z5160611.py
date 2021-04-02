@@ -3,6 +3,7 @@ from flask_restx import Api, Resource, reqparse
 import requests
 import json
 import sqlite3
+from datetime import datetime
 
 # ==== Important Variables ====
 app = Flask(__name__)
@@ -21,12 +22,23 @@ def getTvShowName(x):
 # this receives a list of objects, filters the list and returns it
 def filterGetTvShowNameResponse(show_object):
   new_show_object = {
-    "show_name": show_object['show']['name'],
-    "tvmaze_show_id" : show_object['show']['id'],
-    "show_genre" : show_object['show']['genres'],
-    "show_language" : show_object['show']['language'],
-    "show_score" : show_object['score'],
-    "show_links" : show_object['show']['_links']
+    "name": show_object['show']['name'],
+    "tvmaze-id" : show_object['show']['id'],
+    "language" : show_object['show']['language'],
+    "rating" : json.dumps(show_object['show']['rating']),
+    "_links" : json.dumps(show_object['show']['_links']),
+
+    "last-updated": json.dumps(datetime.now(), indent=4, sort_keys=True, default=str),
+    "type": show_object['show']['type'],
+    "genre" : json.dumps(show_object['show']['genres']),
+    "status": show_object['show']['status'],
+    "runtime": show_object['show']['runtime'],
+    "premiered": show_object['show']['premiered'],
+    "official-site": show_object['show']['officialSite'],
+    "schedule": json.dumps(show_object['show']['schedule']),
+    "weight": show_object['show']['weight'],
+    "network": json.dumps(show_object['show']['network']),
+    "summary": show_object['show']['summary'],
   }
   return new_show_object
 
@@ -52,7 +64,7 @@ class Tv_Show_Name(Resource):
     response = getTvShowName(tv_show_name)
     #print(type(response))
     response = response.json()
-
+  
     if(len(response) > 0):
       matching_show = response[0]
       matching_show = filterGetTvShowNameResponse(matching_show)
@@ -63,7 +75,7 @@ class Tv_Show_Name(Resource):
       return "no matches for given tv show name", 204
 
     # check whether the show already exists in the database
-    isAlreadyInDb = checkIfEntryAlreadyExists(matching_show_with_id['tvmaze_show_id'], 'tvmaze_id')
+    isAlreadyInDb = checkIfEntryAlreadyExists(matching_show_with_id['tvmaze-id'], 'tvmaze_id')
 
     if(isAlreadyInDb == 1):
       # already exists
@@ -101,8 +113,8 @@ def insertToDatabase(x):
     cursor = sqliteConnection.cursor()
     print("Successfully connected to SQLite")
 
-    cursor.execute("insert into TV_SHOWS_DATABASE (id, tvmaze_id, name, language, score) values (?, ?, ?, ?, ?)", 
-                  (x['id'], x['tvmaze_show_id'], x['show_name'], x['show_language'], x['show_score']))
+    cursor.execute("insert into TV_SHOWS_DATABASE (id, tvmaze_id, name, language, rating, _links, last_updated, type, genre, status, runtime, premiered, official_site, schedule, weight, network, summary) values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", 
+                  (x['id'], x['tvmaze-id'], x['name'], x['language'], x['rating'], x['_links'], x['last-updated'], x['type'], x['genre'], x['status'], x['runtime'], x['premiered'], x['official-site'], x['schedule'], x['weight'], x['network'], x['summary']))
     sqliteConnection.commit()
     cursor.close()
   except sqlite3.Error as error:
@@ -117,7 +129,7 @@ def createTable():
     sqliteConnection = sqlite3.connect('z5160611.db')
     cursor = sqliteConnection.cursor()
     cursor.execute("""CREATE TABLE IF NOT EXISTS TV_SHOWS_DATABASE 
-                  (id, tvmaze_id, name, language, score) """)
+                  (id, tvmaze_id, name, language, rating, _links, last_updated, type, genre, status, runtime, premiered, official_site, schedule, weight, network, summary) """)
     sqliteConnection.commit()
     cursor.close()
   except sqlite3.Error as error:
@@ -222,7 +234,6 @@ def testGetColumns():
 
 # ====
 createTable()
-testGetColumns()
 
 if __name__ == '__main__':
   
