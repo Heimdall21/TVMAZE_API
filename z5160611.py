@@ -55,6 +55,30 @@ def addUniqueApiID(show_match):
     show_match['id'] = latest_id + 1
   return show_match
 
+def convertTupleToResponseObject(tuple):
+  new_object = {
+    "id": tuple[0],
+    "tvmaze_id": tuple[1],
+    "name": tuple[2],
+    "language": tuple[3],
+    "rating": tuple[4],
+    "_links": tuple[5],
+    "last_updated": tuple[6],
+    "type": tuple[7],
+    "genre": tuple[8],
+    "status": tuple[9],
+    "runtime": tuple[10],
+    "premiered": tuple[11],
+    "official_site": tuple[12],
+    "schedule": tuple[13],
+    "weight": tuple[14],
+    "network": tuple[15],
+    "summary": tuple[16],
+
+  }
+  return new_object
+
+
 # ====
 @api.route('/tv_shows/<string:tv_show_name>')
 class Tv_Show_Name(Resource):
@@ -100,11 +124,30 @@ class Retrieve_TV_Show(Resource):
       api.abort(404, "TV Show {} doesn't exist".format(id))
    
     print("before result")
-   # return the entry 
+    # return the entry 
     result = retrieveTvShowById(id)
-    print("result type: ", type(result))
-    return json.dumps(result)
+    cleaned_result = convertTupleToResponseObject(result)
+    return cleaned_result
+
+@api.route('/tv-shows/<int:id>')
+class Delete_TV_Show(Resource):
+  def delete(self, id):
+    # check if entry exists
+    isExist = checkIfEntryAlreadyExists(id, 'id')
+    if(isExist == 1):
+      deleteRowById(id)
+      return {"message": "The tv show with id {} was removed from the database".format(id), "id":id}
+    else:
+      return {"message": "The tv show with id {} does not exist in the database".format(id), "id":id}
+
+@api.route('/tv-shows/<int:id>')
+class Update_TV_Show(Resource):
+  def patch(self, id):
+    pass
+
     
+
+
 
 # ==== Database functions ====
 def insertToDatabase(x):
@@ -230,6 +273,22 @@ def testGetColumns():
     if sqliteConnection:
       sqliteConnection.close()
       print("The SQL connection is clsed: from testGetColumns")
+
+def deleteRowById(id):
+  try:
+    sqliteConnection = sqlite3.connect('z5160611.db')
+    cursor = sqliteConnection.cursor()
+    cursor.execute("delete from TV_SHOWS_DATABASE where id = (?)", (id,))
+    sqliteConnection.commit()
+    result = cursor.fetchall()
+    print("delete result: ", result)
+    return result
+  except sqlite3.Error as error:
+    print("Failed to delete by id: ", error)
+  finally:
+    if sqliteConnection:
+      sqliteConnection.close()
+      print("The SQL connection is clsed: from deleteRowById")
 
 
 # ====
