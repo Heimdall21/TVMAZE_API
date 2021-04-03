@@ -10,6 +10,8 @@ import socket
 app = Flask(__name__)
 api = Api(app)
 
+parser = reqparse.RequestParser()
+parser.add_argument('updateObject', type=json.loads)
 
 # ==== Helper functions ====
 
@@ -59,18 +61,18 @@ def addUniqueApiID(show_match):
 def convertTupleToResponseObject(tuple):
   new_object = {
     "id": tuple[0],
-    "tvmaze_id": tuple[1],
+    "tvmaze-id": tuple[1],
     "name": tuple[2],
     "language": tuple[3],
     "rating": tuple[4],
     "_links": tuple[5],
-    "last_updated": tuple[6],
+    "last-updated": tuple[6],
     "type": tuple[7],
     "genre": tuple[8],
     "status": tuple[9],
     "runtime": tuple[10],
     "premiered": tuple[11],
-    "official_site": tuple[12],
+    "official-site": tuple[12],
     "schedule": tuple[13],
     "weight": tuple[14],
     "network": tuple[15],
@@ -79,22 +81,29 @@ def convertTupleToResponseObject(tuple):
   }
   return new_object
 
-
+def updateRow(cleaned_result, updateObject):
+  for k in updateObject.keys():
+    newValue = updateObject[k]
+    cleaned_result[k] = newValue
+  cleaned_result['last_updated'] = json.dumps(datetime.now(), indent=4, sort_keys=True, default=str)
+  return cleaned_result
 # ====
+
 @api.route('/tv_shows/<string:tv_show_name>')
 class Tv_Show_Name(Resource):
 
   def get(self, tv_show_name):
     # fetch the data from the TV Maze API
     response = getTvShowName(tv_show_name)
-    #print(type(response))
     response = response.json()
-  
+
     if(len(response) > 0):
       matching_show = response[0]
       matching_show = filterGetTvShowNameResponse(matching_show)
+
       # now add unique database ids 
       matching_show_with_id = addUniqueApiID(matching_show)
+
     else:
       # no matches
       return "no matches for given tv show name", 204
@@ -116,21 +125,20 @@ class Tv_Show_Name(Resource):
 @api.route('/tv_shows/<int:id>')
 class Retrieve_TV_Show(Resource):
   def get(self, id):
-    print("this is the id: ", id)
     isExist = checkIfEntryAlreadyExists(id, 'id')
-    print("isExist: ", isExist)
     if(not isExist):
-      print("inside this not exists condition")
       # doesn't exist
       api.abort(404, "TV Show {} doesn't exist".format(id))
    
-    print("before result")
     # return the entry 
     result = retrieveTvShowById(id)
     cleaned_result = convertTupleToResponseObject(result)
 
     # create dynamic links
     added_link_result = addLinks(cleaned_result)
+
+    # return - but with modifcations to turn json strings into dicts
+    #added_link_result['']
 
     return added_link_result
 
@@ -145,10 +153,37 @@ class Delete_TV_Show(Resource):
     else:
       return {"message": "The tv show with id {} does not exist in the database".format(id), "id":id}
 
-@api.route('/tv-shows/<int:id>')
+# humbug
+@api.expect(parser)
+@api.route('/tv-shows/<int:id> ')
 class Update_TV_Show(Resource):
   def patch(self, id):
-    pass
+    # gets args
+    args = parser.parse_args()
+    updateObject = args['updateObject']
+    
+    # 1. Check if id exists
+    isExist = checkIfEntryAlreadyExists(id, 'id')
+    if(isExist == 0):
+      return {"message": "The tv show with id {} does not exist in the database and therefore will not be updated".format(id), "id":id}
+    # 2. Retrieve show by id
+    row = retrieveTvShowById(id)
+    cleaned_result = convertTupleToResponseObject(row)
+    # 3. Iterate through keys of update object and create new row
+    new_row = updateRow(cleaned_result, updateObject)
+
+    # 4. Delete old row
+    deleteRowById(id)
+    # 5. Add new row
+    insertToDatabase(new_row)
+
+    updateResponseObject = {
+      "id": id,
+      "last-update": new_row['last_updated'],
+      "_links": json.loads(new_row['_links'])
+    }
+    return updateResponseObject
+    
 
   
 
@@ -252,7 +287,6 @@ def retrieveTvShowById(id):
     cursor.execute("SELECT * FROM TV_SHOWS_DATABASE WHERE id = (?)", (id,))
     sqliteConnection.commit()
     row = cursor.fetchone()
-    print("row: ", row)
     return row
   except sqlite3.Error as error:
     print("Failed to retrieve TV show by id: ", error)
@@ -269,7 +303,6 @@ def testGetColumns():
     cursor.execute("PRAGMA table_info(TV_SHOWS_DATABASE)")
     sqliteConnection.commit()
     row = cursor.fetchall()
-    print(row)
   except sqlite3.Error as error:
     print("Failed to execute testGetColumns: ", error)
   finally:
@@ -284,7 +317,6 @@ def deleteRowById(id):
     cursor.execute("delete from TV_SHOWS_DATABASE where id = (?)", (id,))
     sqliteConnection.commit()
     result = cursor.fetchall()
-    print("delete result: ", result)
     return result
   except sqlite3.Error as error:
     print("Failed to delete by id: ", error)
@@ -294,7 +326,6 @@ def deleteRowById(id):
       print("The SQL connection is closed: from deleteRowById")
 
 
-#humbug
 # checks if there are links before or after and adds links appropriate
 def addLinks(cleaned_result):
   # checks if the id before or after exists
@@ -302,7 +333,6 @@ def addLinks(cleaned_result):
   links = cleaned_result['_links']
   links_dict = json.loads(links)
   self_link = links_dict['self']['href']
-  print("self-link: ", self_link)
 
 
   # get the column value of ids
@@ -430,9 +460,6 @@ def addLinks(cleaned_result):
     if sqliteConnection:
       sqliteConnection.close()
       print("The SQL connection is closed from addLinks")
-  
-  # add links
-
 
 # ====
 createTable()
