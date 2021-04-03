@@ -4,6 +4,7 @@ import requests
 import json
 import sqlite3
 from datetime import datetime
+import socket
 
 # ==== Important Variables ====
 app = Flask(__name__)
@@ -127,7 +128,11 @@ class Retrieve_TV_Show(Resource):
     # return the entry 
     result = retrieveTvShowById(id)
     cleaned_result = convertTupleToResponseObject(result)
-    return cleaned_result
+
+    # create dynamic links
+    added_link_result = addLinks(cleaned_result)
+
+    return added_link_result
 
 @api.route('/tv-shows/<int:id>')
 class Delete_TV_Show(Resource):
@@ -145,9 +150,7 @@ class Update_TV_Show(Resource):
   def patch(self, id):
     pass
 
-    
-
-
+  
 
 # ==== Database functions ====
 def insertToDatabase(x):
@@ -288,7 +291,147 @@ def deleteRowById(id):
   finally:
     if sqliteConnection:
       sqliteConnection.close()
-      print("The SQL connection is clsed: from deleteRowById")
+      print("The SQL connection is closed: from deleteRowById")
+
+
+#humbug
+# checks if there are links before or after and adds links appropriate
+def addLinks(cleaned_result):
+  # checks if the id before or after exists
+  currentId = cleaned_result['id']
+  links = cleaned_result['_links']
+  links_dict = json.loads(links)
+  self_link = links_dict['self']['href']
+  print("self-link: ", self_link)
+
+
+  # get the column value of ids
+  try:
+    sqliteConnection = sqlite3.connect('z5160611.db')
+    cursor = sqliteConnection.cursor()
+    cursor.execute("select id from TV_SHOWS_DATABASE")
+    column = cursor.fetchall()
+
+    columnNoTuples = [i[0] for i in column]
+    index = columnNoTuples.index(currentId)
+    nthInList = index + 1
+    noIds = len(columnNoTuples)
+
+    # self link
+    currentHostname = socket.gethostname()
+    currentPortnumber = 5000
+    id = currentId
+    link_string = "htttp://{}:{}/tv-shows/{}".format(currentHostname, currentPortnumber, id)
+    new_self_link = {
+      "self": {
+        "href": link_string
+      }
+    }
+
+    if(noIds == 0):
+      return {"message":"no rows to add links from"}
+    elif(noIds == 1):
+      # return current self
+      cleaned_result['_links'] = new_self_link
+      return cleaned_result
+    elif(noIds == 2):
+      # return only a prev or a next PLUS a self
+      if(nthInList == 2):
+        # get the value of the previous id 
+        prevId = columnNoTuples[(index - 1)]
+        link_string = "htttp://{}:{}/tv-shows/{}".format(currentHostname, currentPortnumber, prevId)
+        previous_link = {
+          "previous": {
+            "href": link_string
+          }
+        }
+        _links = {
+          "self": new_self_link,
+          "previous": previous_link
+        }
+        cleaned_result['_links'] = _links
+        return cleaned_result
+      else:
+        nextId = columnNoTuples[(index + 1)]
+        link_string = "htttp://{}:{}/tv-shows/{}".format(currentHostname, currentPortnumber, nextId)
+        next_link = {
+          "next": {
+            "href": link_string
+          }
+        }
+        _links = {
+          "self": new_self_link,
+          "next": next_link
+        }
+        cleaned_result['_links'] = _links
+        return cleaned_result
+
+
+    # this is if there are 3 or more rows
+    # check if it's in the last row of the column
+    if(nthInList == noIds):
+      # then it's the last row id of a table with at least 3 rows
+      prevId = columnNoTuples[(index - 1)]
+      link_string = "htttp://{}:{}/tv-shows/{}".format(currentHostname, currentPortnumber, prevId)
+      previous_link = {
+        "previous": {
+          "href": link_string
+        }
+      }
+      _links = {
+        "self": new_self_link,
+        "previous": previous_link
+      }
+      cleaned_result['_links'] = _links
+      return cleaned_result
+
+    elif(nthInList == 1):
+      # then it's the first row id in a table with at least 3 rows
+      nextId = columnNoTuples[(index + 1)]
+      link_string = "htttp://{}:{}/tv-shows/{}".format(currentHostname, currentPortnumber, nextId)
+      next_link = {
+        "next": {
+          "href": link_string
+        }
+      }
+      _links = {
+        "self": new_self_link,
+        "next": next_link
+      }
+      cleaned_result['_links'] = _links
+      return cleaned_result
+    else:
+      # it's in the middle somewhere
+      prevId = columnNoTuples[(index - 1)]
+      link_string = "htttp://{}:{}/tv-shows/{}".format(currentHostname, currentPortnumber, prevId)
+      previous_link = {
+        "previous": {
+          "href": link_string
+        }
+      }
+      nextId = columnNoTuples[(index + 1)]
+      link_string = "htttp://{}:{}/tv-shows/{}".format(currentHostname, currentPortnumber, nextId)
+      next_link = {
+        "next": {
+          "href": link_string
+        }
+      }
+      _links = {
+        "self": new_self_link,
+        "previous": previous_link,
+        "next": next_link,
+      }
+      cleaned_result['_links'] = _links
+      return cleaned_result
+
+  except sqlite3.Error as error:
+    print("Failed in the process of adding links: ", error)
+  finally:
+    if sqliteConnection:
+      sqliteConnection.close()
+      print("The SQL connection is closed from addLinks")
+  
+  # add links
 
 
 # ====
