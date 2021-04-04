@@ -1,10 +1,15 @@
-from flask import Flask, jsonify, make_response
+from flask import Flask, jsonify, make_response, Response
 from flask_restx import Api, Resource, reqparse
 import requests
 import json
 import sqlite3
 from datetime import datetime
 import socket
+import matplotlib.pyplot as plt
+from collections import Counter
+import io
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 # ==== Important Variables ====
 app = Flask(__name__)
@@ -18,6 +23,10 @@ parser1.add_argument('order_by', type=str, default="+id")
 parser1.add_argument('page', type=int, default=1)
 parser1.add_argument('page_size', type=int, default=100)
 parser1.add_argument('filter', type=str, default="id,name")
+
+parser2 = reqparse.RequestParser()
+parser2.add_argument('format', type=str)
+parser2.add_argument('by', type=str)
 
 # ==== Helper functions ====
 
@@ -180,7 +189,6 @@ def convertTupleToDict(listOfLists, filterTuple):
     listOfDicts.append(dictShow)
   return listOfDicts
 
-# humbug
 def selectRightPage(tvShows, page, page_size):
   # do something
   noTvShows = len(tvShows)
@@ -198,8 +206,36 @@ def selectRightPage(tvShows, page, page_size):
       slicedTvShows = tvShows[beginning:]
   return slicedTvShows
 
-# ====
 
+def languageStatistics(languageColumn):
+  # right now we get a list of lists so
+  flat_list = [item for sublist in languageColumn for item in sublist]
+  print("flat_list: ", flat_list)
+
+  parsedData = Counter(flat_list)
+  return parsedData
+
+# humbug
+def renderStatistics(parsedData):
+  # data to plot
+  labels = []
+  values = []
+
+  for x, y in parsedData.items():
+    labels.append(x)
+    values.append(y)
+
+  # Plot
+  # plt.pie(values, labels=labels)
+  # plt.show()
+  fig, ax1 = plt.subplots()
+  ax1.pie(values, labels=labels)
+
+  return fig
+
+
+
+# ====
 @api.route('/tv_shows/<string:tv_show_name>')
 class Tv_Show_Name(Resource):
 
@@ -341,7 +377,43 @@ class Get_Tv_Show_By_Order(Resource):
       }
     }
     return responseObject
+
+@api.expect(parser2)
+@api.route('/tv-shows/statistics')
+class Get_Tv_Show_Statistics(Resource):
+  def get(self):
     
+    args = parser2.parse_args()
+    byAttr = args['by']
+    formatAttr = args['format']
+
+    result = {"by": byAttr, "format": formatAttr}
+
+    # humbug
+    # 1. Get the data for each attribute - language, genres, status, type <- these can all be pie graphs
+    if(byAttr == "language"):
+      # a) Get the language column data
+      languageColumn = getColumn("language")
+      data = languageStatistics(languageColumn)
+      figure = renderStatistics(data)
+
+      output = io.BytesIO()
+      FigureCanvas(figure).print_png(output)
+      return Response(output.getvalue(), mimetype='image/png')
+    # elif(byAttr == "genres"):
+    #   data = genresStatistics()
+    # elif(byAttr == "status"):
+    #   data = statusStatistics()
+    # else:
+    #   data = typeStatistics()
+
+
+    # 2. Turn data into a graph or json object
+
+    # 3. Return data
+
+
+    return data
 
 # ==== Database functions ====
 def insertToDatabase(x):
@@ -617,11 +689,7 @@ def addLinks(cleaned_result):
       sqliteConnection.close()
       print("The SQL connection is closed from addLinks")
 
-# humbug
 def queryDatabase(queryString):
-  # order by (orderAttribute) and return columns (filterTuple) for each row
-  print("queryString: ", queryString)
-
   try:
     sqliteConnection = sqlite3.connect('z5160611.db')
     cursor = sqliteConnection.cursor()
@@ -636,6 +704,25 @@ def queryDatabase(queryString):
     if sqliteConnection:
       sqliteConnection.close()
       print("The SQL connection is closed: from queryDatabase")
+
+# humbug
+def getColumn(byAttribute):
+  queryString = "SELECT " + byAttribute + " FROM TV_SHOWS_DATABASE"
+  try:
+    sqliteConnection = sqlite3.connect('z5160611.db')
+    cursor = sqliteConnection.cursor()
+    cursor.execute(queryString)
+    sqliteConnection.commit()
+    result = cursor.fetchall()
+    print("column result: ", result)
+    return result
+  except sqlite3.Error as error:
+    print("Failed to query the database: ", error)
+  finally:
+    if sqliteConnection:
+      sqliteConnection.close()
+      print("The SQL connection is closed: from queryDatabase")
+
 
 
 # ====
