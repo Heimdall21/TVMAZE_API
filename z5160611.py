@@ -169,13 +169,35 @@ def filterKeyForDatabase(instruction):
   elif(instruction == 'summary'):
     return "summary"
 
-# humbug
-def convertTupleToDict(listOfTuples):
+def convertTupleToDict(listOfLists, filterTuple):
   listOfDicts = []
-  for tupleShow in listOfTuples:
-    dictShow = dict(tupleShow)
+  filterList = list(filterTuple)
+  for tvShowList in listOfLists:
+    zippedList = zip(filterList, tvShowList)
+    zippedList = list(zippedList)
+    dictShow = dict(zippedList)
+
     listOfDicts.append(dictShow)
   return listOfDicts
+
+# humbug
+def selectRightPage(tvShows, page, page_size):
+  # do something
+  noTvShows = len(tvShows)
+  beginning = (page - 1) * page_size
+
+  # if they are asking for a page that doesn't exist
+  if (noTvShows < beginning):
+    return {"message":"no such page"}
+  # there should be some results 
+  else:
+    leftTvShows = noTvShows - (beginning + 1)
+    if (leftTvShows >= page_size):
+      slicedTvShows = tvShows[beginning:(beginning + page_size)]
+    else:
+      slicedTvShows = tvShows[beginning:]
+  return slicedTvShows
+
 # ====
 
 @api.route('/tv_shows/<string:tv_show_name>')
@@ -272,7 +294,7 @@ class Update_TV_Show(Resource):
     }
     return updateResponseObject
 
-# humbug
+
 @api.expect(parser1)
 @api.route('/tv-shows/retrieve-list')
 class Get_Tv_Show_By_Order(Resource):
@@ -293,13 +315,20 @@ class Get_Tv_Show_By_Order(Resource):
     
     # 3. query the database
     result = queryDatabase(queryString)
-    print("TESTING")
-    return result
+  
     # 4. Clean up the data to be presentable - a) Turn the list of lists into a list of dicts with 
+    # humbug
+    tvShows = convertTupleToDict(result, filterTuple)
 
-    # result = convertTupleToDict(result, filterTuple)
+    # select the right page
+    slicedTvShows = selectRightPage(tvShows, page, page_size)
 
-    # return result
+    # get the links
+    
+
+    # create final return object
+
+    return slicedTvShows
     
 
 # ==== Database functions ====
