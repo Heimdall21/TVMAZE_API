@@ -317,18 +317,30 @@ class Get_Tv_Show_By_Order(Resource):
     result = queryDatabase(queryString)
   
     # 4. Clean up the data to be presentable - a) Turn the list of lists into a list of dicts with 
-    # humbug
     tvShows = convertTupleToDict(result, filterTuple)
 
     # select the right page
     slicedTvShows = selectRightPage(tvShows, page, page_size)
 
+
     # get the links
+
+    currentHostname = socket.gethostname()
+    currentPortnumber = 5000
+    self_link = "htttp://{}:{}/tv-shows?order_by{}&page={}page_size=1000&filter={}".format(currentHostname, currentPortnumber, order_by, page, filter)
+    next_link = "htttp://{}:{}/tv-shows?order_by{}&page={}page_size=1000&filter={}".format(currentHostname, currentPortnumber, order_by, page + 1, filter)
     
-
     # create final return object
-
-    return slicedTvShows
+    responseObject = {
+      "page": page,
+      "page_size": page_size,
+      "tv-shows": slicedTvShows,
+      "_links": {
+        "self": self_link,
+        "next": next_link
+      }
+    }
+    return responseObject
     
 
 # ==== Database functions ====
