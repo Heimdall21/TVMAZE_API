@@ -13,6 +13,12 @@ api = Api(app)
 parser = reqparse.RequestParser()
 parser.add_argument('updateObject', type=json.loads)
 
+parser1  = reqparse.RequestParser()
+parser1.add_argument('order_by', type=str, default="+id")
+parser1.add_argument('page', type=int, default=1)
+parser1.add_argument('page_size', type=int, default=100)
+parser1.add_argument('filter', type=str, default="id,name")
+
 # ==== Helper functions ====
 
 def getTvShowName(x):
@@ -87,6 +93,89 @@ def updateRow(cleaned_result, updateObject):
     cleaned_result[k] = newValue
   cleaned_result['last_updated'] = json.dumps(datetime.now(), indent=4, sort_keys=True, default=str)
   return cleaned_result
+
+def convertStringToArray(fooString):
+  filterArray = fooString.split(',')
+  length = len(filterArray)
+  filterTuple = tuple(filterArray)
+  
+  sqlInput = "("
+  i = 0
+  while i < (length - 1):
+    sqlInput = sqlInput + "?, "
+    i += 1
+  sqlInput = sqlInput + "?)"
+  print(filterTuple)
+  dataPack = (filterTuple, sqlInput)
+  return dataPack
+
+def queryStringCreator(order_by, filterTuple, sqlInput):
+  # orderby = "+rating-average,+id"
+  orderString = ""
+  orderbyInstructions = order_by.split(',')
+  for instruction in orderbyInstructions:
+    orderAttribute = instruction[1:]
+    filteredOrderAttribute = filterKeyForDatabase(orderAttribute)
+    singleInstruction = ""
+    sign = instruction[0]
+    
+    if(sign == '+'):
+      singleInstruction = filteredOrderAttribute + " ASC"
+    elif(sign == '-'):
+      singleInstruction = filteredOrderAttribute + " DESC"
+    orderString = orderString + singleInstruction + ","
+  
+  orderString = orderString[:-1]
+  filteredString = ', '.join(filterTuple)
+  
+  queryString = 'SELECT ' + filteredString + ' FROM TV_SHOWS_DATABASE ORDER BY ' + orderString
+
+  return queryString
+
+
+def filterKeyForDatabase(instruction):
+  print(instruction)
+  if(instruction == 'rating-average'):
+    return "rating"
+  elif(instruction == 'id'):
+    return "id"
+  elif(instruction == 'tvmaze-id'):
+    return "tvmaze_id"
+  elif(instruction == 'name'):
+    return "name"
+  elif(instruction == 'language'):
+    return "language"
+  elif(instruction == 'last-update'):
+    return "last_updated"
+  elif(instruction == 'premiered'):
+    return "premiered"
+  elif(instruction == 'runtime'):
+    return "runtime"
+  # for extra
+  elif(instruction == 'type'):
+    return "type"
+  elif(instruction == 'genres'):
+    return "genres"
+  elif(instruction == 'status'):
+    return "status"
+  elif(instruction == 'officialSite'):
+    return "official_site"
+  elif(instruction == 'schedule'):
+    return "schedule"
+  elif(instruction == 'weight'):
+    return "weight"
+  elif(instruction == 'network'):
+    return "network"
+  elif(instruction == 'summary'):
+    return "summary"
+
+# humbug
+def convertTupleToDict(listOfTuples):
+  listOfDicts = []
+  for tupleShow in listOfTuples:
+    dictShow = dict(tupleShow)
+    listOfDicts.append(dictShow)
+  return listOfDicts
 # ====
 
 @api.route('/tv_shows/<string:tv_show_name>')
@@ -153,7 +242,6 @@ class Delete_TV_Show(Resource):
     else:
       return {"message": "The tv show with id {} does not exist in the database".format(id), "id":id}
 
-# humbug
 @api.expect(parser)
 @api.route('/tv-shows/<int:id> ')
 class Update_TV_Show(Resource):
@@ -183,9 +271,36 @@ class Update_TV_Show(Resource):
       "_links": json.loads(new_row['_links'])
     }
     return updateResponseObject
-    
 
-  
+# humbug
+@api.expect(parser1)
+@api.route('/tv-shows/retrieve-list')
+class Get_Tv_Show_By_Order(Resource):
+  def get(self):
+    args = parser1.parse_args()
+    order_by = args['order_by']  # always going to be 2 values 
+    page = args['page'] # always going to be one value
+    page_size = args['page_size'] # always going to be one value
+    filter = args['filter'] # could be multiple values
+
+    # 1. convert the parameters into sql queries
+    dataPack = convertStringToArray(filter)
+    filterTuple = dataPack[0]
+    sqlInput = dataPack[1]
+
+    # 2. Make the query string
+    queryString = queryStringCreator(order_by, filterTuple, sqlInput)
+    
+    # 3. query the database
+    result = queryDatabase(queryString)
+    print("TESTING")
+    return result
+    # 4. Clean up the data to be presentable - a) Turn the list of lists into a list of dicts with 
+
+    # result = convertTupleToDict(result, filterTuple)
+
+    # return result
+    
 
 # ==== Database functions ====
 def insertToDatabase(x):
@@ -460,6 +575,27 @@ def addLinks(cleaned_result):
     if sqliteConnection:
       sqliteConnection.close()
       print("The SQL connection is closed from addLinks")
+
+# humbug
+def queryDatabase(queryString):
+  # order by (orderAttribute) and return columns (filterTuple) for each row
+  print("queryString: ", queryString)
+
+  try:
+    sqliteConnection = sqlite3.connect('z5160611.db')
+    cursor = sqliteConnection.cursor()
+    cursor.execute(queryString)
+    sqliteConnection.commit()
+    result = cursor.fetchall()
+    print("queryResult: ", result)
+    return result
+  except sqlite3.Error as error:
+    print("Failed to query the database: ", error)
+  finally:
+    if sqliteConnection:
+      sqliteConnection.close()
+      print("The SQL connection is closed: from queryDatabase")
+
 
 # ====
 createTable()
