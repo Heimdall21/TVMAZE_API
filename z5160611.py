@@ -247,7 +247,6 @@ def genresStatistics(genresColumn):
   #parsedData = Counter(flat_list)
   return parsedData
 
-# humbug
 def statusStatistics(statusColumn):
   flat_list = [item for sublist in statusColumn for item in sublist]
   parsedData = Counter(flat_list)
@@ -257,6 +256,20 @@ def typeStatistics(typeColumn):
   flat_list = [item for sublist in typeColumn for item in sublist]
   parsedData = Counter(flat_list)
   return parsedData
+
+# humbug
+def countRecentlyUpdatedTvShows(lastUpdatedColumn):
+  flat_list = [json.loads(item) for sublist in lastUpdatedColumn for item in sublist]
+  count = 0
+  currentTime = datetime.now()
+  for date in flat_list:
+    dateWithSecondsRounded = date.split('.', 1)[0]
+    dateTimeObject = datetime.strptime(dateWithSecondsRounded, '%Y-%m-%d %H:%M:%S')
+    delta = currentTime - dateTimeObject
+    deltaSeconds = delta.total_seconds()
+    if(deltaSeconds > (24*3600)):
+      count += 1
+  return count
 # ====
 @api.route('/tv_shows/<string:tv_show_name>')
 class Tv_Show_Name(Resource):
@@ -435,7 +448,6 @@ class Get_Tv_Show_Statistics(Resource):
         FigureCanvas(figure).print_png(output)
         return Response(output.getvalue(), mimetype='image/png')
       elif(byAttr == "status"):
-        # humbug
         statusColumn = getColumn("status")
         parsedData = statusStatistics(statusColumn)
         
@@ -452,16 +464,37 @@ class Get_Tv_Show_Statistics(Resource):
         output = io.BytesIO()
         FigureCanvas(figure).print_png(output)
         return Response(output.getvalue(), mimetype='image/png')
-    # else:
-    #   # format is in json
+    else:
+      responseObject = {}
+      # format is in json
+      # 1. Get the data for each attribute - language, genres, status, type <- these can all be pie graphs
+      if(byAttr == "language"):
+        languageColumn = getColumn("language")
+        parsedData = languageStatistics(languageColumn)
+      elif(byAttr == "genres"):
+        genresColumn = getColumn("genre")
+        parsedData = genresStatistics(genresColumn)
+      elif(byAttr == "status"):
+        statusColumn = getColumn("status")
+        parsedData = statusStatistics(statusColumn)
+      else:
+        typeColumn = getColumn("type")
+        parsedData = typeStatistics(typeColumn)
+   
+      # get the rest of the data
+      # a) total number of tv shows
+      totalTvShows = countNoTvShowTableRows()
+      # humbug
+      # b) shows updated in the last 24 hours
+      lastUpdatedColumn = getColumn("last_updated")
+      totalTvShowsRecentlyUpdated = countRecentlyUpdatedTvShows(lastUpdatedColumn)
 
-
-    # 2. Turn data into a graph or json object
-
-    # 3. Return data
-
-
-    return data
+      responseObject = {
+        "total": totalTvShows,
+        "total-updated": totalTvShowsRecentlyUpdated,
+        "values": parsedData
+      }
+      return responseObject
 
 # ==== Database functions ====
 def insertToDatabase(x):
