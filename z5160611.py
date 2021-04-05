@@ -210,12 +210,10 @@ def selectRightPage(tvShows, page, page_size):
 def languageStatistics(languageColumn):
   # right now we get a list of lists so
   flat_list = [item for sublist in languageColumn for item in sublist]
-  print("flat_list: ", flat_list)
 
   parsedData = Counter(flat_list)
   return parsedData
 
-# humbug
 def renderStatistics(parsedData):
   # data to plot
   labels = []
@@ -233,8 +231,32 @@ def renderStatistics(parsedData):
 
   return fig
 
+def trimJson(matching_show_with_id):
+  if(type(matching_show_with_id['_links']) != dict):
+    matching_show_with_id['_links'] = json.loads(matching_show_with_id['_links'])
+  matching_show_with_id['genre'] = json.loads(matching_show_with_id['genre'])
+  matching_show_with_id['schedule'] = json.loads(matching_show_with_id['schedule'])
+  matching_show_with_id['network'] = json.loads(matching_show_with_id['network'])
+  matching_show_with_id['rating'] = json.loads(matching_show_with_id['rating'])
+  matching_show_with_id['last-updated'] = json.loads(matching_show_with_id['last-updated'])
+  return matching_show_with_id
 
+def genresStatistics(genresColumn):
+  flat_list = [json.loads(item) for sublist in genresColumn for item in sublist]
+  parsedData = Counter(tuple(item) for item in flat_list)
+  #parsedData = Counter(flat_list)
+  return parsedData
 
+# humbug
+def statusStatistics(statusColumn):
+  flat_list = [item for sublist in statusColumn for item in sublist]
+  parsedData = Counter(flat_list)
+  return parsedData
+
+def typeStatistics(typeColumn):
+  flat_list = [item for sublist in typeColumn for item in sublist]
+  parsedData = Counter(flat_list)
+  return parsedData
 # ====
 @api.route('/tv_shows/<string:tv_show_name>')
 class Tv_Show_Name(Resource):
@@ -267,7 +289,10 @@ class Tv_Show_Name(Resource):
       insertToDatabase(matching_show_with_id)
 
       # returns the response - should it be returned in json? I think yes.
-      return matching_show_with_id
+      # make sure for certain attributes; they are loaded again so the response doesn't contain json strings 
+      preparedResponse = trimJson(matching_show_with_id)
+
+      return preparedResponse
 
 @api.route('/tv_shows/<int:id>')
 class Retrieve_TV_Show(Resource):
@@ -285,9 +310,9 @@ class Retrieve_TV_Show(Resource):
     added_link_result = addLinks(cleaned_result)
 
     # return - but with modifcations to turn json strings into dicts
-    #added_link_result['']
+    preparedResponse = trimJson(added_link_result)
 
-    return added_link_result
+    return preparedResponse
 
 @api.route('/tv-shows/<int:id>')
 class Delete_TV_Show(Resource):
@@ -328,6 +353,7 @@ class Update_TV_Show(Resource):
       "last-update": new_row['last_updated'],
       "_links": json.loads(new_row['_links'])
     }
+
     return updateResponseObject
 
 
@@ -387,25 +413,47 @@ class Get_Tv_Show_Statistics(Resource):
     byAttr = args['by']
     formatAttr = args['format']
 
-    result = {"by": byAttr, "format": formatAttr}
 
-    # humbug
-    # 1. Get the data for each attribute - language, genres, status, type <- these can all be pie graphs
-    if(byAttr == "language"):
-      # a) Get the language column data
-      languageColumn = getColumn("language")
-      data = languageStatistics(languageColumn)
-      figure = renderStatistics(data)
+    if(formatAttr == "image"):
+      # 1. Get the data for each attribute - language, genres, status, type <- these can all be pie graphs
+      if(byAttr == "language"):
+        # a) Get the language column data
+        languageColumn = getColumn("language")
+        data = languageStatistics(languageColumn)
+        figure = renderStatistics(data)
 
-      output = io.BytesIO()
-      FigureCanvas(figure).print_png(output)
-      return Response(output.getvalue(), mimetype='image/png')
-    # elif(byAttr == "genres"):
-    #   data = genresStatistics()
-    # elif(byAttr == "status"):
-    #   data = statusStatistics()
+        output = io.BytesIO()
+        FigureCanvas(figure).print_png(output)
+        return Response(output.getvalue(), mimetype='image/png')
+      elif(byAttr == "genres"):
+        genresColumn = getColumn("genre")
+        # parses the data
+        parsedData = genresStatistics(genresColumn)
+        # create the statistic as an image and return
+        figure = renderStatistics(parsedData)
+        output = io.BytesIO()
+        FigureCanvas(figure).print_png(output)
+        return Response(output.getvalue(), mimetype='image/png')
+      elif(byAttr == "status"):
+        # humbug
+        statusColumn = getColumn("status")
+        parsedData = statusStatistics(statusColumn)
+        
+        figure = renderStatistics(parsedData)
+        output = io.BytesIO()
+        FigureCanvas(figure).print_png(output)
+        return Response(output.getvalue(), mimetype='image/png')
+
+      else:
+        typeColumn = getColumn("type")
+        parsedData = typeStatistics(typeColumn)
+        
+        figure = renderStatistics(parsedData)
+        output = io.BytesIO()
+        FigureCanvas(figure).print_png(output)
+        return Response(output.getvalue(), mimetype='image/png')
     # else:
-    #   data = typeStatistics()
+    #   # format is in json
 
 
     # 2. Turn data into a graph or json object
@@ -705,7 +753,6 @@ def queryDatabase(queryString):
       sqliteConnection.close()
       print("The SQL connection is closed: from queryDatabase")
 
-# humbug
 def getColumn(byAttribute):
   queryString = "SELECT " + byAttribute + " FROM TV_SHOWS_DATABASE"
   try:
