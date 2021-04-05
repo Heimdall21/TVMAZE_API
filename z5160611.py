@@ -15,6 +15,11 @@ from matplotlib.figure import Figure
 app = Flask(__name__)
 api = Api(app)
 
+# Note: Setting up to run (inside the terminal)
+# export FLASK_APP=z5160611.py
+# export FLASK_ENV=development
+# flask run
+
 parser = reqparse.RequestParser()
 parser.add_argument('updateObject', type=json.loads)
 
@@ -257,7 +262,6 @@ def typeStatistics(typeColumn):
   parsedData = Counter(flat_list)
   return parsedData
 
-# humbug
 def countRecentlyUpdatedTvShows(lastUpdatedColumn):
   flat_list = [json.loads(item) for sublist in lastUpdatedColumn for item in sublist]
   count = 0
@@ -267,10 +271,12 @@ def countRecentlyUpdatedTvShows(lastUpdatedColumn):
     dateTimeObject = datetime.strptime(dateWithSecondsRounded, '%Y-%m-%d %H:%M:%S')
     delta = currentTime - dateTimeObject
     deltaSeconds = delta.total_seconds()
-    if(deltaSeconds > (24*3600)):
+    if(deltaSeconds < (24*3600)):
       count += 1
   return count
 # ====
+@api.doc(description="Retrieve a tv show form external API and enter into local database")
+@api.response(200, 'TV show resource retrieved succesfully')
 @api.route('/tv_shows/<string:tv_show_name>')
 class Tv_Show_Name(Resource):
 
@@ -307,6 +313,9 @@ class Tv_Show_Name(Resource):
 
       return preparedResponse
 
+
+@api.doc(description="Retrieve a TV show from local database")
+@api.response(200, 'TV show resource retrieved succesfully')
 @api.route('/tv_shows/<int:id>')
 class Retrieve_TV_Show(Resource):
   def get(self, id):
@@ -327,6 +336,9 @@ class Retrieve_TV_Show(Resource):
 
     return preparedResponse
 
+
+@api.doc(description="Delte a TV show in the database if it exists")
+@api.response(200, 'TV Show has been successfully deleted')
 @api.route('/tv-shows/<int:id>')
 class Delete_TV_Show(Resource):
   def delete(self, id):
@@ -336,8 +348,11 @@ class Delete_TV_Show(Resource):
       deleteRowById(id)
       return {"message": "The tv show with id {} was removed from the database".format(id), "id":id}
     else:
-      return {"message": "The tv show with id {} does not exist in the database".format(id), "id":id}
+      #return {"message": "The tv show with id {} does not exist in the database".format(id), "id":id}
+      api.abort(404, "TV Show {} doesn't exist in the database".format(id))
 
+@api.doc(description="Updates an existing entry for a TV show in the local database")
+@api.response(200, 'TV show has been successfully updated')
 @api.expect(parser)
 @api.route('/tv-shows/<int:id> ')
 class Update_TV_Show(Resource):
@@ -369,7 +384,8 @@ class Update_TV_Show(Resource):
 
     return updateResponseObject
 
-
+@api.doc(description="Retrieves a list of TV shows by requested attribute and order")
+@api.response(200, 'Requested TV shows have been successfully returned')
 @api.expect(parser1)
 @api.route('/tv-shows/retrieve-list')
 class Get_Tv_Show_By_Order(Resource):
@@ -397,9 +413,7 @@ class Get_Tv_Show_By_Order(Resource):
     # select the right page
     slicedTvShows = selectRightPage(tvShows, page, page_size)
 
-
     # get the links
-
     currentHostname = socket.gethostname()
     currentPortnumber = 5000
     self_link = "htttp://{}:{}/tv-shows?order_by{}&page={}page_size=1000&filter={}".format(currentHostname, currentPortnumber, order_by, page, filter)
@@ -417,6 +431,10 @@ class Get_Tv_Show_By_Order(Resource):
     }
     return responseObject
 
+@api.doc(description="Returns statistics of TV shows currently in the database")
+@api.response(200, 'TV show statistics have been presented')
+@api.param('by', 'The attribute of the TV show')
+@api.param('format', 'Either "json" or "image"')
 @api.expect(parser2)
 @api.route('/tv-shows/statistics')
 class Get_Tv_Show_Statistics(Resource):
@@ -802,8 +820,6 @@ def getColumn(byAttribute):
     if sqliteConnection:
       sqliteConnection.close()
       print("The SQL connection is closed: from queryDatabase")
-
-
 
 # ====
 createTable()
